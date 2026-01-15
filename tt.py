@@ -187,12 +187,13 @@ HTML_TEMPLATE = """
         const log = document.getElementById('consoleLog');
         const btn = document.getElementById('traceBtn');
         
+        // 1. PURGE AND INITIAL STATUS
         g.selectAll(".trace-arc").remove();
         g.selectAll(".node").remove();
         log.innerHTML = `<div class="hop-entry" style="color:var(--warn)">> PURGING LOCAL CACHE...</div>`;
         
         setTimeout(() => {
-            log.innerHTML += `<div class="hop-entry">> GATHERING DATA...</div>`;
+            log.innerHTML += `<div class="hop-entry">> GATHERING DATA FROM REMOTE NODES...</div>`;
             log.scrollTop = log.scrollHeight;
         }, 400);
 
@@ -212,16 +213,25 @@ HTML_TEMPLATE = """
 
             data.hops.forEach((h, i) => {
                 uniqueCountries.add(h.country);
+                
+                // 2. CREATE LOG ENTRY
                 const entry = document.createElement('div');
                 entry.className = 'hop-entry';
-                entry.id = `log-item-${i}`;
-                entry.onmouseenter = () => highlight(i, true);
+                entry.id = `log-item-${i}`; // Explicitly set ID for bi-directional link
+                
+                // Assign Hover Events to Log Entry
+                entry.onmouseenter = () => {
+                    console.log(`Log Hover: Targeting Node ${i}`);
+                    highlight(i, true);
+                };
                 entry.onmouseleave = () => highlight(i, false);
+                
                 entry.innerHTML = `<span class="hop-num">[${i+1}]</span> ${h.ip}<br><small>LOC: ${h.city}, ${h.country}</small>`;
                 log.appendChild(entry);
 
                 const p2 = projection([h.lon, h.lat]);
 
+                // 3. DRAW ARCS (Underneath nodes)
                 if (i > 0) {
                     const hPrev = data.hops[i-1];
                     totalDistKm += calcDistance(hPrev.lat, hPrev.lon, h.lat, h.lon);
@@ -230,17 +240,30 @@ HTML_TEMPLATE = """
                     const dr = Math.sqrt(dx * dx + dy * dy) * 1.2;
                     const color = h.country !== hPrev.country ? "var(--alert)" : "var(--neon)";
                     const arcPath = `M${p1[0]},${p1[1]} A${dr},${dr} 0 0,1 ${p2[0]},${p2[1]}`;
-                    g.append("path").attr("class", "trace-arc").attr("d", arcPath).attr("stroke", color);
+                    
+                    g.append("path")
+                        .attr("class", "trace-arc")
+                        .attr("d", arcPath)
+                        .attr("stroke", color)
+                        .style("pointer-events", "none"); // IMPORTANT: Arcs won't block mouse
                 }
 
+                // 4. DRAW NODES (On top of arcs)
                 g.append("circle")
-                    .attr("id", `node-${i}`)
+                    .attr("id", `node-${i}`) // ID used by highlight()
                     .attr("class", "node")
-                    .attr("cx", p2[0]).attr("cy", p2[1]).attr("r", 5)
-                    .on("mouseover", () => highlight(i, true))
+                    .attr("cx", p2[0])
+                    .attr("cy", p2[1])
+                    .attr("r", 5)
+                    .style("pointer-events", "all") // IMPORTANT: Node captures mouse focus
+                    .on("mouseover", () => {
+                        console.log(`Map Hover: Targeting Log Item ${i}`);
+                        highlight(i, true);
+                    })
                     .on("mouseout", () => highlight(i, false));
             });
 
+            // 5. FINAL INTEL SUMMARY
             if (data.hops.length > 0) {
                 const totalDistMiles = totalDistKm * 0.621371;
                 log.innerHTML += `
@@ -255,7 +278,8 @@ HTML_TEMPLATE = """
             }
 
         } catch (err) {
-            log.innerHTML += `<div class="hop-entry" style="color:red">> ACCESS DENIED</div>`;
+            console.error("Trace Error:", err);
+            log.innerHTML += `<div class="hop-entry" style="color:red">> ACCESS DENIED: NODE TIMEOUT</div>`;
         }
         btn.disabled = false;
     }
@@ -282,4 +306,4 @@ def trace():
 
 if __name__ == "__main__":
     # Setting use_reloader=False can sometimes help in terminal environments
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
